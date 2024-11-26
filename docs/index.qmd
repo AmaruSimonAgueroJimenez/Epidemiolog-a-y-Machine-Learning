@@ -1,0 +1,64 @@
+---
+title: "Epidemiología y Machine Learning"
+lang: es
+author:
+  - name: "Amaru Simón Agüero Jiménez"
+    email: amaruaguero2004@ug.uchile.cl
+    orcid: "0000-0001-7336-1833"
+format:
+  html:
+    toc: true
+    number-sections: true
+    code-fold: true
+editor: 
+  markdown: 
+    wrap: sentence
+---
+
+# Administración de Datos y paquetes de R.
+
+```{r message=FALSE, warning=FALSE}
+install_and_load_packages <- function(packages) {
+  for (package in packages) {
+    if (!require(package, character.only = TRUE)) {
+      install.packages(package)
+      library(package, character.only = TRUE)
+    }
+  }
+}
+
+necessary_packages <- c("knitr",
+                        "tidyverse",
+                        "naniar",
+                        "data.table",
+                        "writexl",
+                        "party",
+                        "caret",
+                        "rpart",
+                        "partykit",
+                        "ROCR",
+                        "table1",
+                        "DT",
+                        "data.tree",
+                        "randomForest",
+                        "caTools",
+                        "ggraph", 
+                        "igraph",
+                        "e1071",
+                        "class",
+                        "haven",
+                        "stringi",
+                        "class",
+                        "pROC",
+                        "kableExtra",
+                        "Hmisc",
+                        "labelled")
+
+install_and_load_packages(necessary_packages)
+
+
+opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE)
+```
