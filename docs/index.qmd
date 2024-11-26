@@ -28,26 +28,22 @@ install_and_load_packages <- function(packages) {
 }
 
 necessary_packages <- c("knitr",
+                        "janitor",
                         "tidyverse",
                         "naniar",
                         "data.table",
                         "writexl",
-                        "party",
-                        "caret",
-                        "rpart",
-                        "partykit",
                         "ROCR",
                         "table1",
                         "DT",
+                        "FactoMineR",
+                        "factoextra",
+                        "vcd",
+                        "reshape2",
+                        "klaR",
                         "data.tree",
                         "randomForest",
-                        "caTools",
-                        "ggraph", 
-                        "igraph",
-                        "e1071",
-                        "class",
                         "haven",
-                        "stringi",
                         "class",
                         "pROC",
                         "kableExtra",
@@ -62,3 +58,205 @@ opts_chunk$set(
   warning = FALSE,
   message = FALSE)
 ```
+
+```{r}
+data <- read_sav(file = paste0(gsub("/docs", "", getwd()), "/data/data.sav"),
+                 encoding = "latin1") %>%
+  mutate(across(where(is.labelled), to_factor))
+
+select_data <- data %>% dplyr::select(#"IdEncuesta",
+                             "Sexo",
+                             "Edad",
+                             "Region",
+                             "Zona","die1a", "die2",
+                             "die3", "die4", "die5", "die6", "die8",
+                             "die10_a", "die10_b", "die10_c", "die10_d",
+                             "die11", "die12e", "die13e", "die14",
+                             "SINDROME_METABOLICO"#,
+                             #"Conglomerado",
+                             #"Estrato",
+                             #"Fexp_F1p_Corr"
+                             ) %>%
+  mutate(die3 = fct_na_value_to_level(die3, "NO CONSUME LACTEOS"))
+
+
+# column_labels <- sapply(var_label(select_data), function(x) ifelse(is.null(x), NA, as.character(x)))
+# colnames(select_data) <- ifelse(is.na(column_labels), colnames(select_data), column_labels)
+
+colnames(select_data) <- c(
+  "Sexo",
+  "Edad",
+  "Región",
+  "Zona",
+  "Frecuencia Pescado/Mariscos",
+  "Frecuencia Lácteos",
+  "Tipo de Lácteos",
+  "Frecuencia Cereales Integrales",
+  "Frecuencia Legumbres",
+  "Días Frutas/Semana",
+  "Días Verduras/Semana",
+  "Frecuencia de V. Ingredientes",
+  "Frecuencia de V. Tabla Nutricional",
+  "Frecuencia de V. Sellos",
+  "Frecuencia de V. Mensajes Saludables",
+  "Vasos Agua/Día",
+  "Vasos Bebidas Azucaradas",
+  "Vasos Jugo Azucarado",
+  "Tipo de Aceite",
+  "Síndrome Metabólico"
+)
+
+
+select_data <- select_data %>%
+  mutate(`Vasos Agua/Día` = as.numeric(`Vasos Agua/Día`)) %>% 
+  mutate(
+    `Vasos Agua/Día` = case_when(
+      `Vasos Agua/Día` >= 0 & `Vasos Agua/Día` <= 2 ~ "MUY BAJO",
+      `Vasos Agua/Día` >= 3 & `Vasos Agua/Día` <= 4 ~ "BAJO",
+      `Vasos Agua/Día` >= 5 & `Vasos Agua/Día` <= 8 ~ "ADECUADO",
+      `Vasos Agua/Día` > 8 ~ "ALTO",
+      TRUE ~ NA_character_
+    ) %>% 
+      factor(levels = c("MUY BAJO", "BAJO", "ADECUADO", "ALTO")),
+    
+    `Vasos Bebidas Azucaradas` = case_when(
+      `Vasos Bebidas Azucaradas` == 0 ~ "NO CONSUME",
+      `Vasos Bebidas Azucaradas` >= 1 & `Vasos Bebidas Azucaradas` <= 2 ~ "OCASIONAL",
+      `Vasos Bebidas Azucaradas` >= 3 & `Vasos Bebidas Azucaradas` <= 4 ~ "FRECUENTE",
+      `Vasos Bebidas Azucaradas` > 4 ~ "ALTO",
+      TRUE ~ NA_character_
+    ) %>%
+      factor(levels = c("NO CONSUME", "OCASIONAL", "FRECUENTE", "ALTO")),
+    
+    `Vasos Jugo Azucarado` = case_when(
+      `Vasos Jugo Azucarado` == 0 ~ "NO CONSUME",
+      `Vasos Jugo Azucarado` >= 1 & `Vasos Jugo Azucarado` <= 2 ~ "OCASIONAL",
+      `Vasos Jugo Azucarado` >= 3 & `Vasos Jugo Azucarado` <= 4 ~ "FRECUENTE",
+      `Vasos Jugo Azucarado` > 4 ~ "ALTO",
+      TRUE ~ NA_character_
+    ) %>%
+      factor(levels = c("NO CONSUME", "OCASIONAL", "FRECUENTE", "ALTO"))
+  )
+
+select_data <- select_data %>%
+  mutate(
+    Edad = cut(
+      Edad,
+      breaks = c(-Inf, 18, 29, 39, 49, 59, 69, Inf),  # Define los rangos de edad
+      labels = c("≤18 años", "19-29 años", "30-39 años", "40-49 años", "50-59 años", "60-69 años", "≥70 años"),
+      right = TRUE
+    )
+  )
+
+
+```
+
+# Datos perdidos
+
+```{r}
+vis_miss(select_data,sort_miss = TRUE)
+
+gg_miss_upset(select_data, nsets = n_var_miss(select_data))
+
+select_data <- select_data %>% drop_na()
+```
+
+# K-Modes clustering
+```{r}
+#| fig-width: 10
+#| fig-height: 10
+
+select_data2 <- select_data %>% as.data.frame() %>% dplyr::select( "Frecuencia Pescado/Mariscos",
+  "Frecuencia Lácteos",
+  "Tipo de Lácteos",
+  "Frecuencia Cereales Integrales",
+  "Frecuencia Legumbres",
+  "Días Frutas/Semana",
+  "Días Verduras/Semana",
+  "Vasos Agua/Día",
+  "Vasos Bebidas Azucaradas",
+  "Vasos Jugo Azucarado",
+  "Tipo de Aceite")
+
+# Probar diferentes valores de k
+set.seed(123)
+max_k <- 10  # Define el número máximo de clústeres a evaluar
+dissimilarity <- numeric(max_k)  # Vector para almacenar la disimilitud total
+
+for (k in 1:max_k) {
+  kmodes_model <- kmodes(select_data2, modes = k)
+  dissimilarity[k] <- kmodes_model$withindiff  # Suma de disimilitudes dentro de los clústeres
+}
+
+# Visualizar los resultados
+plot(1:max_k, dissimilarity, type = "b", pch = 19,
+     xlab = "Número de Clústeres (k)", ylab = "Disimilitud Total",
+     main = "Método del Codo para K-Modes")
+
+
+# Establecer el número de clústeres
+k <- 4 # Cambia el número de clústeres según lo que necesites
+
+# Aplicar K-Modes
+set.seed(291190)  # Para reproducibilidad
+kmodes_model <- klaR::kmodes(select_data2, modes = k)
+
+mca_result <- MCA(select_data2, graph = FALSE)
+# Agregar los clústeres al dataset original
+select_data2$Cluster <- as.factor(kmodes_model$cluster)
+
+# Visualizar los clústeres en el espacio MCA
+fviz_mca_ind(mca_result,
+             label = "none",                # Ocultar etiquetas de individuos
+             habillage = select_data2$Cluster, # Usar los clústeres como color
+             palette = "jco",               # Paleta de colores
+             addEllipses = TRUE,            # Agregar elipses alrededor de los clústeres
+             ellipse.type = "confidence",   # Elipses de confianza
+             title = "Visualización de Clústeres en el Espacio MCA")
+
+
+# Visualizar las contribuciones de las variables
+fviz_mca_var(mca_result,
+             repel = TRUE, # Evitar la superposición de etiquetas
+             labelsize = 3,
+             title = "Contribuciones de Variables en MCA")
+```
+# hierarchical clustering
+```{r}
+#| fig-width: 15
+#| fig-height: 15
+# Calcular distancias entre individuos en el espacio MCA
+mca_coords <- mca_result$ind$coord  # Coordenadas de los individuos en MCA
+dist_matrix <- dist(mca_coords, method = "euclidean")  # Distancia Euclidiana
+
+# Clustering jerárquico
+hclust_model <- hclust(dist_matrix, method = "ward.D2")
+
+# Cortar el dendrograma en k clústeres
+clusters <- cutree(hclust_model, k = 4)
+
+select_data2$Cluster <- as.factor(clusters)
+
+# Visualizar los clústeres en el espacio MCA
+fviz_mca_ind(mca_result,
+             label = "none",                # Ocultar etiquetas de individuos
+             habillage = select_data2$Cluster, # Usar los clústeres como color
+             palette = "jco",               # Paleta de colores
+             addEllipses = TRUE,            # Agregar elipses alrededor de los clústeres
+             ellipse.type = "confidence",   # Elipses de confianza
+             title = "Visualización de Clústeres en el Espacio MCA")
+
+# Graficar dendrograma
+# plot(hclust_model, 
+#      labels = FALSE, 
+#      main = "Dendrograma de Clustering Jerárquico",
+#      xlab = "", ylab = "Altura")
+# 
+# # Graficar el dendrograma con colores
+# fviz_dend(hclust_model, k = k, 
+#           rect = TRUE,            # Dibujar rectángulos alrededor de los clústeres
+#           rect_fill = TRUE,       # Rellenar los rectángulos con color
+#           rect_border = "jco",    # Colores de borde
+#           main = "Dendrograma con Clústeres")
+```
+
