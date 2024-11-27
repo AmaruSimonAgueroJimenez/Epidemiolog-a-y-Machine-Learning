@@ -1,6 +1,5 @@
 ---
-title: "Epidemiología y Machine Learning"
-lang: es
+title: "Epidemiology and Machine Learning"
 author:
   - name: "Amaru Simón Agüero Jiménez"
     email: amaruaguero2004@ug.uchile.cl
@@ -15,7 +14,7 @@ editor:
     wrap: sentence
 ---
 
-# Administración de Datos y paquetes de R.
+# Data administration and R packages
 
 ```{r message=FALSE, warning=FALSE}
 install_and_load_packages <- function(packages) {
@@ -48,7 +47,15 @@ necessary_packages <- c("knitr",
                         "pROC",
                         "kableExtra",
                         "Hmisc",
-                        "labelled")
+                        "labelled",
+                        "cluster",
+                        "performance", 
+                        "party", 
+                        "caret", 
+                        "rpart", 
+                        "partykit",
+                        "kernlab"
+                        )
 
 install_and_load_packages(necessary_packages)
 
@@ -57,7 +64,38 @@ opts_chunk$set(
   echo = TRUE,
   warning = FALSE,
   message = FALSE)
+
+options(digits = 3)
 ```
+
+# Methods
+
+## Description of the dataset
+
+The Chile National Health Survey 2016-2017 (Encuesta Nacional de Salud 2016-2017) was conducted by the Department of Epidemiology of the Ministry of Health of Chile.
+This survey aimed to develop preventive health policies by collecting data from citizens aged 15 and over regarding their health status and subsequent treatment of illnesses.
+
+The survey employed a probabilistic, geographically stratified, and multistage sampling design, ensuring national, regional, and urban-rural representativeness.
+A total of 6,233 individuals participated, with 5,520 undergoing laboratory tests.
+
+-   Data collection encompassed a wide range of health-related topics, including:
+
+-   **Chronic diseases:** hypertension, diabetes, cardiovascular diseases, and chronic kidney diseases.
+
+-   Mental health: depressive symptoms and other mental health conditions.
+
+-   Lifestyle factors: alcohol and tobacco use, physical activity, and dietary habits.
+
+-   **Nutritional status:** assessments of obesity, undernutrition, and micronutrient deficiencies.
+
+-   Oral health: evaluation of dental caries and other oral health issues.
+
+-   Preventive behaviors: screening practices for various cancers and chronic diseases.
+
+The information gathered is vital for formulating prevention plans, healthcare strategies, and public health policies tailored to the needs of the population.
+EPI MINSAL
+
+For more detailed information and access to the survey's datasets, you can visit the Department of Epidemiology's [website](https://epi.minsal.cl/bases-de-datos/).
 
 ```{r}
 data <- read_sav(file = paste0(gsub("/docs", "", getwd()), "/data/data.sav"),
@@ -68,6 +106,7 @@ select_data <- data %>% dplyr::select(#"IdEncuesta",
                              "Sexo",
                              "Edad",
                              "Region",
+                             "NEDU1_MINSAL_1",
                              "Zona","die1a", "die2",
                              "die3", "die4", "die5", "die6", "die8",
                              "die10_a", "die10_b", "die10_c", "die10_d",
@@ -87,6 +126,7 @@ colnames(select_data) <- c(
   "Sexo",
   "Edad",
   "Región",
+  "Nivel Educacional",
   "Zona",
   "Frecuencia Pescado/Mariscos",
   "Frecuencia Lácteos",
@@ -151,17 +191,115 @@ select_data <- select_data %>%
 
 ```
 
-# Datos perdidos
+# Missing Data
 
 ```{r}
-vis_miss(select_data,sort_miss = TRUE)
-
+vis_miss(select_data, sort_miss = TRUE) +
+  theme(axis.text.x = element_text(angle = 90)) 
 gg_miss_upset(select_data, nsets = n_var_miss(select_data))
 
 select_data <- select_data %>% drop_na()
 ```
+## Machine learning Unsupervised
 
-# K-Modes clustering
+To explore and uncover dietary patterns in the dataset without predefined labels or outcomes, unsupervised machine learning techniques were employed.
+Specifically, hierarchical clustering and K-Modes clustering were used to identify potential groupings or clusters within the data.
+These methods are particularly suitable for datasets with mixed data types, including categorical and continuous variables.
+
+### K-Modes Clustering
+
+For datasets dominated by categorical variables, K-Modes clustering was applied:
+
+-   Initialization: The algorithm initialized cluster centroids using the "modes" of the data.
+
+-   Optimization: Iterative updates minimized the dissimilarity within clusters using a categorical distance measure.
+
+-   Cluster Assignments: Final cluster memberships were assigned to each observation, revealing underlying patterns in the data.
+
+### Hierarchical Clustering
+
+Hierarchical clustering was performed to create a hierarchical representation of the data in the form of a dendrogram.
+The following steps were taken:
+
+-   Distance Matrix Calculation: A dissimilarity matrix was computed using Gower's Distance metric for categorical variables indefined(.
+
+-   Clustering Algorithm: The Ward’s linkage method was applied to minimize intra-cluster variance.
+    Dendrogram Visualization:
+
+-   The dendrogram provided insights into the structure of the data and guided the determination of the optimal number of clusters.
+
+### Visualization
+Dimensionality Reduction for Visualization To facilitate the visualization of high-dimensional data, dimensionality reduction techniques such as Multiple Correspondence Analysis (MCA) were applied: MCA was employed for categorical variables, providing a reduced feature space for cluster representation.
+
+## Machine Learning Supervised
+
+### Dataset splitting
+
+The entire dataset was stratified and divided into two subsets, ensuring that both sets maintained the original proportion of classes in the dependent variable: the training set, comprising 80% of the total data, was employed to train the models.
+The test set, consisting of 20% of the total data, was reserved for the final evaluation of the models.
+
+### Models
+
+Several Machine Learning models were selected to predict the dichotomous dependent variable (presence or absence of metabolic syndrome (MS)) using the following approaches: Logistic regression: Employing a classical approach to binary classification problems.
+Random forest: A decision-tree-based algorithm that combines multiple trees to enhance accuracy.
+Support Vector Machines (SVM): A model based on maximizing the classification margin.
+Decision trees: An algorithm based on recursive partitioning of data (utilizing the partial method).
+K-Nearest Neighbors (KNN): A distance-based classifier that predicts the class of an observation based on the classes of its nearest neighbors.
+
+For each model, 10-fold cross-validation (CV) was applied to the training set.
+This procedure divides the data into 10 subsets or “folds,” using each fold once as the test set and the other nine as the training set.
+Cross-validation ensures that each observation is used for both training and testing, allowing for a robust estimation of model performance.
+Additionally, a bootstrap method was implemented to evaluate the stability of the models.
+Bootstrap is a sampling technique with replacement, in which multiple subsets of the data (in this case, 100 samples) are generated to train and evaluate the model in each sample.
+This allows the calculation of performance metrics that are more robust and less dependent on a single partition of data.
+Bootstrapping was particularly useful for assessing the variance in model performance and the sensitivity of performance to changes in the data.
+
+### Evaluation Metrics
+To evaluate the performance of each model on the test set (20% set aside), the following metrics were calculated:
+
+#### Sensitivity
+
+Sensitivity is the proportion of true positives (correct prediction of MS) among all true positives:
+
+$$
+\text{Sensitivity} = \frac{\text{True Positives (TP)}}{\text{True Positives (TP)} + \text{False Negatives (FN)}}
+$$
+
+#### Specificity
+
+Specificity is the proportion of true negatives (correct prediction of MS-free) among all true negatives:
+
+$$
+\text{Specificity} = \frac{\text{True Negatives (TN)}}{\text{True Negatives (TN)} + \text{False Positives (FP)}}
+$$
+
+#### Precision
+
+The Positive Predictive Value (PPV), also known as Precision, is the proportion of correctly predicted positives among all predicted positives:
+
+$$
+\text{Precision} = \frac{\text{True Positives (TP)}}{\text{True Positives (TP)} + \text{False Positives (FP)}}
+$$
+
+#### Accuracy
+
+Accuracy is the percentage of all correct predictions, i.e., the proportion of cases where the model correctly predicted the class (MS or MS-free):
+
+$$ 
+\text{Accuracy} = \frac{\text{True Positives (TP)} + \text{True Negatives (TN)}}{\text{Total Cases}}
+$$
+
+### Model Comparison
+
+The models were compared based on the aforementioned performance metrics to determine which one demonstrated superior accuracy, sensitivity, and specificity.
+Furthermore, the performance of each model was compared using the area under the Receiver Operating Characteristic (ROC) curve (AUC) to obtain an overall measure of the discriminatory capacity of the models.
+
+# Results
+
+## Machine learning Unsupervised
+
+### K-Modes clustering
+
 ```{r}
 #| fig-width: 10
 #| fig-height: 10
@@ -221,7 +359,9 @@ fviz_mca_var(mca_result,
              labelsize = 3,
              title = "Contribuciones de Variables en MCA")
 ```
-# hierarchical clustering
+
+### Hierarchical clustering
+
 ```{r}
 #| fig-width: 15
 #| fig-height: 15
@@ -258,5 +398,403 @@ fviz_mca_ind(mca_result,
 #           rect_fill = TRUE,       # Rellenar los rectángulos con color
 #           rect_border = "jco",    # Colores de borde
 #           main = "Dendrograma con Clústeres")
+
+# Calcular matriz de disimilitud con Gower's distance
+dissimilarity_matrix <- daisy(select_data, metric = "gower")
+
+hclust_model <- hclust(as.dist(dissimilarity_matrix), method = "ward.D2")
+
+# Visualizar el dendrograma
+# plot(hclust_model, main = "Dendrograma para Variables Categóricas", 
+#      xlab = "", ylab = "Altura")
+
+# Cortar el dendrograma en k clústeres
+k <- 4  # Define el número de clústeres
+clusters <- cutree(hclust_model, k = k)
+
+select_data2$Cluster <- as.factor(clusters)
+
+# Visualizar los clústeres en el espacio MCA
+fviz_mca_ind(mca_result,
+             label = "none",                # Ocultar etiquetas de individuos
+             habillage = select_data2$Cluster, # Usar los clústeres como color
+             palette = "jco",               # Paleta de colores
+             addEllipses = TRUE,            # Agregar elipses alrededor de los clústeres
+             ellipse.type = "confidence",   # Elipses de confianza
+             title = "Visualización de Clústeres en el Espacio MCA")
+
+# Visualizar el dendrograma con factoextra
+# fviz_dend(hclust_model, k = k, rect = TRUE, rect_fill = TRUE, rect_border = "jco",
+#           main = "Dendrograma con Clústeres")
+```
+## Machine Learning Supervised
+### Cross Validation with 10 K-fold
+
+```{r}
+# Limpiar los nombres de las columnas
+select_data <- select_data %>%
+  clean_names()
+
+# Limpiar los labels de los factores
+select_data <- select_data %>%
+  mutate(across(where(is.factor), ~ fct_relabel(.x, janitor::make_clean_names)))
+
+# Dividir los datos en conjunto de entrenamiento y prueba (80% entrenamiento, 20% prueba)
+set.seed(123)
+train_index <- createDataPartition(select_data$sindrome_metabolico, p = 0.8, list = FALSE)
+train_data <- select_data[train_index, ]
+test_data <- select_data[-train_index, ]
+
+# Definir el control de entrenamiento para validación cruzada
+control <- trainControl(method = "cv", number = 10, classProbs = TRUE, summaryFunction = twoClassSummary, returnResamp = "all" )
+
+# Modelo 1: Regresión logística
+logistic_model <- train(sindrome_metabolico ~ ., data = train_data, method = "glm", family = "binomial", 
+                        trControl = control, metric = "ROC")
+
+# Modelo 2: Random Forest
+rf_model <- train(sindrome_metabolico ~ ., data = train_data, method = "rf", trControl = control, metric = "ROC")
+
+# Modelo 3: Support Vector Machine (SVM)
+svm_model <- train(sindrome_metabolico ~ ., data = train_data, method = "svmRadial", trControl = control, metric = "ROC")
+
+# Modelo 4: Árbol de decisión con rpart
+tree_model <- train(sindrome_metabolico ~ ., data = train_data, method = "rpart", trControl = control, metric = "ROC")
+
+# Modelo 5: K-Nearest Neighbors (KNN)
+knn_model <- train(sindrome_metabolico ~ ., data = train_data, method = "knn", trControl = control, metric = "ROC")
+
+# Evaluación de los modelos en el conjunto de prueba
+logistic_pred <- predict(logistic_model, test_data)
+rf_pred <- predict(rf_model, test_data)
+svm_pred <- predict(svm_model, test_data)
+tree_pred <- predict(tree_model, test_data)
+knn_pred <- predict(knn_model, test_data)
+
+# Calcular las métricas para cada modelo
+logistic_cm <- confusionMatrix(logistic_pred, test_data$sindrome_metabolico, positive = "si")
+rf_cm <- confusionMatrix(rf_pred, test_data$sindrome_metabolico, positive = "si")
+svm_cm <- confusionMatrix(svm_pred, test_data$sindrome_metabolico, positive = "si")
+tree_cm <- confusionMatrix(tree_pred, test_data$sindrome_metabolico, positive = "si")
+knn_cm <- confusionMatrix(knn_pred, test_data$sindrome_metabolico, positive = "si")
+
+# # Mostrar las métricas de evaluación
+# logistic_cm$byClass  # Sensibilidad, Especificidad, Precisión, etc. para la regresión logística
+# rf_cm$byClass        # Sensibilidad, Especificidad, Precisión, etc. para Random Forest
+# svm_cm$byClass       # Sensibilidad, Especificidad, Precisión, etc. para SVM
+# tree_cm$byClass      # Sensibilidad, Especificidad, Precisión, etc. para Árbol de Decisión
+# knn_cm$byClass       # Sensibilidad, Especificidad, Precisión, etc. para KNN
+```
+
+```{r}
+# Modelos en una lista
+models <- list(
+  Logistic = logistic_model,
+  "Random Forest" = rf_model,
+  SVM = svm_model,
+  "Decision Tree" = tree_model,
+  KNN = knn_model
+)
+
+# Función para generar predicciones, curvas ROC y AUC
+get_roc_data <- function(model, test_data, label_col = "sindrome_metabolico") {
+  prob <- predict(model, test_data, type = "prob")[, "si"]
+  roc_curve <- roc(test_data[[label_col]], prob)
+  auc_val <- auc(roc_curve)
+  ci_val <- ci.auc(roc_curve)
+  list(roc = roc_curve, auc = auc_val, ci = ci_val)
+}
+
+# Generar ROC y AUC para todos los modelos
+roc_results <- lapply(models, get_roc_data, test_data = test_data)
+
+# Crear un dataframe con los valores de AUC y su IC
+auc_data <- data.frame(
+  Model = names(roc_results),
+  AUC = sapply(roc_results, function(x) x$auc),
+  Lower = sapply(roc_results, function(x) x$ci[1]),
+  Upper = sapply(roc_results, function(x) x$ci[3])
+)
+
+# Crear las coordenadas ROC para graficar
+fpr_seq <- seq(0, 1, length.out = 2000)
+roc_data <- data.frame(
+  FPR = rep(fpr_seq, times = length(models)),
+  TPR = unlist(lapply(roc_results, function(x) coords(x$roc, x = fpr_seq, input = "specificity", ret = "sensitivity"))),
+  Model = rep(names(models), each = length(fpr_seq))
+)
+
+# Graficar las curvas ROC
+ggplot(roc_data, aes(x = FPR, y = TPR, color = Model)) +
+  geom_line(size = 0.8, alpha = 0.9) +
+  labs(title = "ROC Curves for Models \n(K-fold cross validation resampling method)", x = "1 - Specificity (FPR)", y = "Sensitivity (TPR)") +
+  theme_minimal() +
+  scale_color_manual(values = c("blue", "green", "red", "purple", "orange")) +
+  theme(legend.position = "top")
+```
+```{r}
+# Crear un dataframe vacío para almacenar las métricas
+metrics_data <- data.frame()
+
+# Función para calcular IC de proporciones
+calc_ci <- function(p, n, z = 1.96) {
+  se <- sqrt((p * (1 - p)) / n)
+  c(lower = p - z * se, upper = p + z * se)
+}
+
+# Extraer métricas y AUC de cada modelo
+for (model_name in names(models)) {
+  # Confusion matrix for standard metrics
+  cm <- confusionMatrix(predict(models[[model_name]], test_data), test_data$sindrome_metabolico,positive = "si")
+  
+  # Verificar nombres en cm$byClass para obtener la métrica correcta
+  sensitivity <- cm$byClass["Sensitivity"]
+  specificity <- cm$byClass["Specificity"]
+  precision <- cm$byClass["Precision"]  # Precisión es Pos Predictive Value
+  accuracy <- cm$overall["Accuracy"]
+  
+  # Calcular las métricas estándar
+  model_metrics <- data.frame(
+    Model = model_name,
+    Metric = c("Sensitivity", "Specificity", "Precision", "Accuracy"),
+    Value = c(sensitivity, specificity, precision, accuracy),
+    stringsAsFactors = FALSE
+  )
+  
+  # Calcular los IC para las métricas estándar
+  model_metrics$Lower <- sapply(model_metrics$Value, function(x) calc_ci(x, nrow(test_data))[1])
+  model_metrics$Upper <- sapply(model_metrics$Value, function(x) calc_ci(x, nrow(test_data))[2])
+  
+  # Extraer el AUC para el modelo
+  auc_val <- roc_results[[model_name]]$auc
+  auc_ci <- roc_results[[model_name]]$ci
+  
+  # Agregar el AUC como una métrica
+  auc_metric <- data.frame(
+    Model = model_name,
+    Metric = "AUC",
+    Value = auc_val,
+    Lower = auc_ci[1],
+    Upper = auc_ci[3],
+    stringsAsFactors = FALSE
+  )
+  
+  # Combinar las métricas estándar con el AUC
+  model_metrics <- rbind(model_metrics, auc_metric)
+  
+  # Agregar al dataframe general
+  metrics_data <- rbind(metrics_data, model_metrics)
+}
+
+# Reordenar las métricas en el data frame
+metrics_data$Metric <- factor(metrics_data$Metric, 
+                              levels = c("Sensitivity", "Specificity", "Precision", "Accuracy", "AUC"))
+
+# Graficar las métricas con el nuevo orden (incluyendo AUC) con IC para cada modelo y valores encima
+ggplot(metrics_data, aes(x = Metric, y = Value, fill = Model)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8), width = 0.7,alpha = 0.9) +
+  geom_errorbar(aes(ymin = Lower, ymax = Upper), position = position_dodge(width = 0.8), width = 0.2, color = "black",alpha = 0.9) +
+  geom_text(aes(label = round(Value, 3), y = Upper + 0.05, color = Model), 
+            position = position_dodge(width = 0.8), 
+            angle = 90, 
+            vjust = 0.5, 
+            size = 4) +  # Valores rotados en 90 grados, justo arriba de los intervalos superiores
+  labs(title = "Performance Metrics for Models (K-fold cross validation resampling method) \nwith 95% Confidence Intervals",
+       x = "Metric",
+       y = "Proportion (95% CI)") +
+  theme_minimal() +
+  scale_fill_manual(values = c("blue", "green", "red", "purple", "orange")) +
+  scale_color_manual(values = c("blue", "green", "red", "purple", "orange")) +  # Asegurando que los colores coincidan
+  ylim(0, 1) +
+  theme(legend.position = "top")
+```
+```{r}
+logistic_summary <- summary(logistic_model$finalModel)
+logistic_df <- as.data.frame(logistic_summary$coefficients)
+logistic_df$OR <- exp(logistic_df$Estimate)
+logistic_df$OR_Lower <- exp(logistic_df$Estimate - 1.96 * logistic_df$`Std. Error`)
+logistic_df$OR_Upper <- exp(logistic_df$Estimate + 1.96 * logistic_df$`Std. Error`)
+colnames(logistic_df) <- c("Estimate", "Std. Error", "z value", "Pr(>|z|)", 
+                           "Odds Ratio (OR)", "OR 95% CI Lower", "OR 95% CI Upper")
+logistic_df %>% 
+  kbl(caption = "Summary of Logistic Regression Model Coefficients with Odds Ratio and 95% Confidence Interval") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+### Bootstrap
+```{r}
+# Definir el control de entrenamiento para validación cruzada
+control <- trainControl(method = "boot", number = 100, classProbs = TRUE, summaryFunction = twoClassSummary)
+
+# Modelo 1: Regresión logística
+logistic_model <- train(sindrome_metabolico ~ ., data = train_data, method = "glm", family = "binomial", 
+                        trControl = control, metric = "ROC")
+
+# Modelo 2: Random Forest
+rf_model <- train(sindrome_metabolico ~ ., data = train_data, method = "rf", trControl = control, metric = "ROC")
+
+# Modelo 3: Support Vector Machine (SVM)
+svm_model <- train(sindrome_metabolico ~ ., data = train_data, method = "svmRadial", trControl = control, metric = "ROC")
+
+# Modelo 4: Árbol de decisión con rpart
+tree_model <- train(sindrome_metabolico ~ ., data = train_data, method = "rpart", trControl = control, metric = "ROC")
+
+# Modelo 5: K-Nearest Neighbors (KNN)
+knn_model <- train(sindrome_metabolico ~ ., data = train_data, method = "knn", trControl = control, metric = "ROC")
+
+# Evaluación de los modelos en el conjunto de prueba
+logistic_pred <- predict(logistic_model, test_data)
+rf_pred <- predict(rf_model, test_data)
+svm_pred <- predict(svm_model, test_data)
+tree_pred <- predict(tree_model, test_data)
+knn_pred <- predict(knn_model, test_data)
+
+# Calcular las métricas para cada modelo
+logistic_cm <- confusionMatrix(logistic_pred, test_data$sindrome_metabolico, positive = "si")
+rf_cm <- confusionMatrix(rf_pred, test_data$sindrome_metabolico, positive = "si")
+svm_cm <- confusionMatrix(svm_pred, test_data$sindrome_metabolico, positive = "si")
+tree_cm <- confusionMatrix(tree_pred, test_data$sindrome_metabolico, positive = "si")
+knn_cm <- confusionMatrix(knn_pred, test_data$sindrome_metabolico, positive = "si")
+
+# # Mostrar las métricas de evaluación
+# logistic_cm$byClass  # Sensibilidad, Especificidad, Precisión, etc. para la regresión logística
+# rf_cm$byClass        # Sensibilidad, Especificidad, Precisión, etc. para Random Forest
+# svm_cm$byClass       # Sensibilidad, Especificidad, Precisión, etc. para SVM
+# tree_cm$byClass      # Sensibilidad, Especificidad, Precisión, etc. para Árbol de Decisión
+# knn_cm$byClass       # Sensibilidad, Especificidad, Precisión, etc. para KNN
+```
+
+```{r}
+# Modelos en una lista
+models <- list(
+  Logistic = logistic_model,
+  "Random Forest" = rf_model,
+  SVM = svm_model,
+  "Decision Tree" = tree_model,
+  KNN = knn_model
+)
+
+# Función para generar predicciones, curvas ROC y AUC
+get_roc_data <- function(model, test_data, label_col = "sindrome_metabolico") {
+  prob <- predict(model, test_data, type = "prob")[, "si"]
+  roc_curve <- roc(test_data[[label_col]], prob)
+  auc_val <- auc(roc_curve)
+  ci_val <- ci.auc(roc_curve)
+  list(roc = roc_curve, auc = auc_val, ci = ci_val)
+}
+
+# Generar ROC y AUC para todos los modelos
+roc_results <- lapply(models, get_roc_data, test_data = test_data)
+
+# Crear un dataframe con los valores de AUC y su IC
+auc_data <- data.frame(
+  Model = names(roc_results),
+  AUC = sapply(roc_results, function(x) x$auc),
+  Lower = sapply(roc_results, function(x) x$ci[1]),
+  Upper = sapply(roc_results, function(x) x$ci[3])
+)
+
+# Crear las coordenadas ROC para graficar
+fpr_seq <- seq(0, 1, length.out = 2000)
+roc_data <- data.frame(
+  FPR = rep(fpr_seq, times = length(models)),
+  TPR = unlist(lapply(roc_results, function(x) coords(x$roc, x = fpr_seq, input = "specificity", ret = "sensitivity"))),
+  Model = rep(names(models), each = length(fpr_seq))
+)
+
+# Graficar las curvas ROC
+ggplot(roc_data, aes(x = FPR, y = TPR, color = Model)) +
+  geom_line(size = 0.8, alpha = 0.9) +
+  labs(title = "ROC Curves for Models \n(K-fold cross validation resampling method)", x = "1 - Specificity (FPR)", y = "Sensitivity (TPR)") +
+  theme_minimal() +
+  scale_color_manual(values = c("blue", "green", "red", "purple", "orange")) +
+  theme(legend.position = "top")
+```
+```{r}
+# Crear un dataframe vacío para almacenar las métricas
+metrics_data <- data.frame()
+
+# Función para calcular IC de proporciones
+calc_ci <- function(p, n, z = 1.96) {
+  se <- sqrt((p * (1 - p)) / n)
+  c(lower = p - z * se, upper = p + z * se)
+}
+
+# Extraer métricas y AUC de cada modelo
+for (model_name in names(models)) {
+  # Confusion matrix for standard metrics
+  cm <- confusionMatrix(predict(models[[model_name]], test_data), test_data$sindrome_metabolico,positive = "si")
+  
+  # Verificar nombres en cm$byClass para obtener la métrica correcta
+  sensitivity <- cm$byClass["Sensitivity"]
+  specificity <- cm$byClass["Specificity"]
+  precision <- cm$byClass["Precision"]  # Precisión es Pos Predictive Value
+  accuracy <- cm$overall["Accuracy"]
+  
+  # Calcular las métricas estándar
+  model_metrics <- data.frame(
+    Model = model_name,
+    Metric = c("Sensitivity", "Specificity", "Precision", "Accuracy"),
+    Value = c(sensitivity, specificity, precision, accuracy),
+    stringsAsFactors = FALSE
+  )
+  
+  # Calcular los IC para las métricas estándar
+  model_metrics$Lower <- sapply(model_metrics$Value, function(x) calc_ci(x, nrow(test_data))[1])
+  model_metrics$Upper <- sapply(model_metrics$Value, function(x) calc_ci(x, nrow(test_data))[2])
+  
+  # Extraer el AUC para el modelo
+  auc_val <- roc_results[[model_name]]$auc
+  auc_ci <- roc_results[[model_name]]$ci
+  
+  # Agregar el AUC como una métrica
+  auc_metric <- data.frame(
+    Model = model_name,
+    Metric = "AUC",
+    Value = auc_val,
+    Lower = auc_ci[1],
+    Upper = auc_ci[3],
+    stringsAsFactors = FALSE
+  )
+  
+  # Combinar las métricas estándar con el AUC
+  model_metrics <- rbind(model_metrics, auc_metric)
+  
+  # Agregar al dataframe general
+  metrics_data <- rbind(metrics_data, model_metrics)
+}
+
+# Reordenar las métricas en el data frame
+metrics_data$Metric <- factor(metrics_data$Metric, 
+                              levels = c("Sensitivity", "Specificity", "Precision", "Accuracy", "AUC"))
+
+# Graficar las métricas con el nuevo orden (incluyendo AUC) con IC para cada modelo y valores encima
+ggplot(metrics_data, aes(x = Metric, y = Value, fill = Model)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8), width = 0.7,alpha = 0.9) +
+  geom_errorbar(aes(ymin = Lower, ymax = Upper), position = position_dodge(width = 0.8), width = 0.2, color = "black",alpha = 0.9) +
+  geom_text(aes(label = round(Value, 3), y = Upper + 0.05, color = Model), 
+            position = position_dodge(width = 0.8), 
+            angle = 90, 
+            vjust = 0.5, 
+            size = 4) +  # Valores rotados en 90 grados, justo arriba de los intervalos superiores
+  labs(title = "Performance Metrics for Models (K-fold cross validation resampling method) \nwith 95% Confidence Intervals",
+       x = "Metric",
+       y = "Proportion (95% CI)") +
+  theme_minimal() +
+  scale_fill_manual(values = c("blue", "green", "red", "purple", "orange")) +
+  scale_color_manual(values = c("blue", "green", "red", "purple", "orange")) +  # Asegurando que los colores coincidan
+  ylim(0, 1) +
+  theme(legend.position = "top")
+```
+```{r}
+logistic_summary <- summary(logistic_model$finalModel)
+logistic_df <- as.data.frame(logistic_summary$coefficients)
+logistic_df$OR <- exp(logistic_df$Estimate)
+logistic_df$OR_Lower <- exp(logistic_df$Estimate - 1.96 * logistic_df$`Std. Error`)
+logistic_df$OR_Upper <- exp(logistic_df$Estimate + 1.96 * logistic_df$`Std. Error`)
+colnames(logistic_df) <- c("Estimate", "Std. Error", "z value", "Pr(>|z|)", 
+                           "Odds Ratio (OR)", "OR 95% CI Lower", "OR 95% CI Upper")
+logistic_df %>% 
+  kbl(caption = "Summary of Logistic Regression Model Coefficients with Odds Ratio and 95% Confidence Interval") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
 ```
 
